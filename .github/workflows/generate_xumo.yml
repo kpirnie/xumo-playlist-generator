@@ -1,0 +1,68 @@
+name: Generate Xumo M3U and EPG
+
+on:
+  schedule:
+    # Runs every 8 hours (00:00, 08:00, 16:00 UTC)
+    - cron: '0 */8 * * *'
+  workflow_dispatch: # Allows manual triggering from the Actions tab
+  push:
+    branches:
+      - main
+    paths:
+      - 'generate_xumo.py' # Trigger if script changes
+      - '.github/workflows/generate_xumo.yml'
+
+jobs:
+  build-xumo-playlist:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Allow the job to push changes back to the repo
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10' # Or your preferred Python version
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests # Only dependency needed for this script
+
+      - name: Run Xumo Generation Script
+        run: python generate_xumo.py # Make sure filename matches
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+          # Check ONLY Xumo files for changes to avoid interfering with other potential playlists
+          if git diff --quiet --exit-code playlists/xumo_playlist.m3u playlists/xumo_epg.xml.gz; then
+            echo "No changes detected in Xumo playlist or EPG files."
+            exit 0 # Exit successfully, no commit needed
+          fi
+
+          echo "Changes detected in Xumo files, committing updates..."
+          # Stage *only* the specific Xumo output files
+          git add playlists/xumo_playlist.m3u playlists/xumo_epg.xml.gz
+
+          git commit -m "Update Xumo M3U playlist and EPG [skip ci]"
+          # Retry push with delay
+          n=0
+          until [ $n -ge 5 ]
+          do
+             git push && break
+             n=$((n+1))
+             echo "Push failed. Retrying attempt $n/5..."
+             sleep 15
+          done
+          if [ $n -ge 5 ]; then
+             echo "Failed to push Xumo changes after multiple attempts."
+             exit 1 # Exit with error if push fails
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

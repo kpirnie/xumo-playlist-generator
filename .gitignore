@@ -1,4 +1,4 @@
-# Python
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
@@ -50,7 +50,7 @@ venv.bak/
 .spyderworkspace
 .ropeproject
 
-# OS
+# --- Operating System Files ---
 .DS_Store
 ._*
 .Spotlight-V100
@@ -61,7 +61,7 @@ ehthumbs_vista.db
 *.stackdump
 Desktop.ini
 
-# IDEs / Editors
+# --- IDEs / Editors ---
 .vscode/
 .history/
 *.code-workspace
@@ -74,7 +74,7 @@ shelf/
 *.sublime-workspace
 .atom/
 
-# Other
+# --- Other ---
 *.log
 *.swp
 *~

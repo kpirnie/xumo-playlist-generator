@@ -44,7 +44,7 @@ jobs:
 
           # --- IMPORTANT: REPLACE 'your_script_name.py' with the actual filename ---
           echo "--- Running Python Script: your_script_name.py ---"
-          python your_script_name.py # <<< CHANGE THIS FILENAME
+          python generate_xumo.py # <<< CHANGE THIS FILENAME
 
           echo "--- Python Script Finished ---"
 

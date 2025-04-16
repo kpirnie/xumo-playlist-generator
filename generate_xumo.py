@@ -53,6 +53,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - [
 
 # --- Helper Functions ---
 
+# <<< CORRECTED fetch_data function >>>
 def fetch_data(url, params=None, is_json=True, retries=2, delay=2, headers=WEB_HEADERS):
     """Fetches data from a URL, handles JSON parsing and errors, includes retries."""
     logging.debug(f"URL: {url}, Params: {params}")
@@ -63,27 +64,50 @@ def fetch_data(url, params=None, is_json=True, retries=2, delay=2, headers=WEB_H
             logging.debug(f"Request URL: {response.url}")
             logging.debug(f"Response Status: {response.status_code}")
             response.raise_for_status()
+
             if is_json:
-                if not response.content: logging.warning(f"Empty response content received from {url}"); return None
-                try: return response.json()
+                if not response.content:
+                    logging.warning(f"Empty response content received from {url}")
+                    return None
+                try:
+                    parsed_json = response.json()
+                    return parsed_json
                 except json.JSONDecodeError as e_final:
                     logging.error(f"Error decoding JSON. Content: {response.text[:500]}... - {e_final}")
-                    if logging.getLogger().level == logging.DEBUG: logging.debug(f"Full Text:\n{response.text}")
+                    if logging.getLogger().level == logging.DEBUG:
+                        logging.debug(f"Full Text:\n{response.text}")
                     return None
             else:
-                 try: decoded_text = response.content.decode('utf-8', errors='ignore'); if logging.getLogger().level == logging.DEBUG: logging.debug(f"Raw Text Response:\n{decoded_text[:1500]}..."); return decoded_text
-                 except Exception as decode_ex: logging.error(f"Error decoding text response: {decode_ex}"); return None
+                # --- CORRECTED BLOCK for non-JSON response ---
+                 try:
+                     decoded_text = response.content.decode('utf-8', errors='ignore')
+                     if logging.getLogger().level == logging.DEBUG:
+                         logging.debug(f"Raw Text Response:\n{decoded_text[:1500]}...")
+                     return decoded_text
+                 except Exception as decode_ex:
+                     logging.error(f"Error decoding text response: {decode_ex}")
+                     return None
+                # --- END OF CORRECTION ---
+
         except requests.exceptions.HTTPError as e:
             logging.warning(f"Attempt {attempt+1}/{retries+1} HTTP Error: {e}")
             if response is not None: logging.warning(f"Error Response Content: {response.text[:500]}...")
-            if attempt < retries and response is not None and response.status_code not in [401, 403, 404, 429]: time.sleep(delay * (attempt + 1))
-            elif attempt == retries: logging.error(f"Final attempt failed with HTTP Error: {e}"); return None
-            else: break
+            if attempt < retries and response is not None and response.status_code not in [401, 403, 404, 429]:
+                time.sleep(delay * (attempt + 1))
+            elif attempt == retries:
+                logging.error(f"Final attempt failed with HTTP Error: {e}")
+                return None
+            else:
+                break
         except requests.exceptions.RequestException as e:
             logging.warning(f"Attempt {attempt+1}/{retries+1} Network Error: {e}")
-            if attempt < retries: time.sleep(delay * (attempt + 1))
-            elif attempt == retries: logging.error(f"Final attempt failed with Network Error: {e}"); return None
+            if attempt < retries:
+                time.sleep(delay * (attempt + 1))
+            elif attempt == retries:
+                logging.error(f"Final attempt failed with Network Error: {e}")
+                return None
     return None
+# <<< END OF CORRECTED fetch_data function >>>
 
 def parse_iso_datetime(iso_time_str):
     """Parses ISO 8601 string, handling 'Z', milliseconds, and '+HHMM' timezone format."""
@@ -110,28 +134,13 @@ def format_xmltv_time(dt_obj):
     if not isinstance(dt_obj, datetime):
         logging.warning(f"format_xmltv_time received non-datetime object: {type(dt_obj)}")
         return ""
-
-    # Ensure the object is timezone-aware and set to UTC
-    if not dt_obj.tzinfo:
-        dt_obj_utc = dt_obj.replace(tzinfo=timezone.utc)
-        logging.debug(f"format_xmltv_time: Input was naive, assumed UTC: {dt_obj_utc}")
-    else:
-        dt_obj_utc = dt_obj.astimezone(timezone.utc)
-        logging.debug(f"format_xmltv_time: Input had timezone, converted to UTC: {dt_obj_utc}")
-
-    # Format the main part and the offset separately, then combine
-    main_part = dt_obj_utc.strftime('%Y%m%d%H%M%S')
-    offset_part = dt_obj_utc.strftime('%z') # Gets +HHMM or -HHMM
-
-    # Ensure offset has no colon (should be default on most systems for %z, but make sure)
+    if not dt_obj.tzinfo: dt_obj_utc = dt_obj.replace(tzinfo=timezone.utc); logging.debug(f"format_xmltv_time: Input was naive, assumed UTC: {dt_obj_utc}")
+    else: dt_obj_utc = dt_obj.astimezone(timezone.utc); logging.debug(f"format_xmltv_time: Input had timezone, converted to UTC: {dt_obj_utc}")
+    main_part = dt_obj_utc.strftime('%Y%m%d%H%M%S'); offset_part = dt_obj_utc.strftime('%z')
     offset_part_clean = offset_part.replace(':', '')
-
-    # Combine with a space
     full_time_str = f"{main_part} {offset_part_clean}"
-    logging.debug(f"Formatted time: {full_time_str}") # Debug the final output
-    return full_time_str
+    logging.debug(f"Formatted time: {full_time_str}"); return full_time_str
 # <<< END OF FINAL MODIFIED format_xmltv_time function >>>
-
 
 def ensure_output_dir():
     if not os.path.exists(OUTPUT_DIR):
@@ -140,36 +149,23 @@ def ensure_output_dir():
         except OSError as e: logging.error(f"Failed to create directory {OUTPUT_DIR}: {e}"); raise
 
 # <<< MODIFIED save_gzipped_xml function >>>
-# --- XMLTV DOCTYPE Addition Option ---
 ADD_XMLTV_DOCTYPE = True # Set to True to add <!DOCTYPE...>
 
 def save_gzipped_xml(tree, filepath):
     """Saves the ElementTree XML to a gzipped file, optionally adding DOCTYPE."""
     try:
         if ADD_XMLTV_DOCTYPE:
-            # Get XML string without default declaration, ensuring UTF-8 compatibility
             xml_partial_string = ET.tostring(tree.getroot(), encoding='unicode', method='xml')
-            # Construct full string with UTF-8 declaration and DOCTYPE
             xml_full_string = f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE tv SYSTEM "xmltv.dtd">
 {xml_partial_string}'''
-            # Encode the final string to UTF-8 bytes
-            xml_bytes = xml_full_string.encode('utf-8')
-            logging.debug("Adding DOCTYPE to XML output.")
+            xml_bytes = xml_full_string.encode('utf-8'); logging.debug("Adding DOCTYPE to XML output.")
         else:
-            # Default behavior: Use standard ET tostring with declaration (already UTF-8 bytes)
-            xml_bytes = ET.tostring(tree.getroot(), encoding='UTF-8', xml_declaration=True)
-            logging.debug("Saving XML without DOCTYPE.")
-
-        # Write the UTF-8 bytes to the gzipped file
-        with gzip.open(filepath, 'wb') as f:
-            f.write(xml_bytes)
+            xml_bytes = ET.tostring(tree.getroot(), encoding='UTF-8', xml_declaration=True); logging.debug("Saving XML without DOCTYPE.")
+        with gzip.open(filepath, 'wb') as f: f.write(xml_bytes)
         logging.info(f"Gzipped EPG XML file saved: {filepath}")
-
-    except Exception as e:
-        logging.error(f"Error writing gzipped EPG file {filepath}: {e}")
+    except Exception as e: logging.error(f"Error writing gzipped EPG file {filepath}: {e}")
 # <<< END OF MODIFIED save_gzipped_xml function >>>
-
 
 def save_m3u(content, filepath):
     try:
@@ -188,9 +184,8 @@ def process_stream_uri(uri):
         return uri
     except Exception as e: logging.error(f"Error processing stream URI '{uri[:50]}...': {e}"); return None
 
-
-# --- Core Logic Functions (get_channels..., fetch_streams..., fetch_epg...) ---
-# No changes needed in these core data fetching/processing functions from previous version
+# --- Core Logic Functions ---
+# ... (Keep get_channels_via_proxy_list, get_live_channels_list_android_tv, fetch_stream_urls_via_asset_lookup, fetch_epg_data functions the same as the last version) ...
 def get_channels_via_proxy_list():
     logging.info(f"Attempting Valencia Proxy List: {PROXY_CHANNEL_LIST_URL}")
     data = fetch_data(PROXY_CHANNEL_LIST_URL, is_json=True, retries=1, headers=WEB_HEADERS)
@@ -372,8 +367,8 @@ def generate_epg_xml(channel_list_with_streams, consolidated_epg_data):
                 title = program.get('title', 'Unknown Program'); desc_obj = program.get('descriptions', {})
                 desc = desc_obj.get('large') or desc_obj.get('medium') or desc_obj.get('small') or desc_obj.get('tiny')
                 episode_title = program.get('episodeTitle'); asset_id = program.get('assetId')
-                start_formatted = format_xmltv_time(start_time); stop_formatted = format_xmltv_time(end_time) # Use updated formatter (no colon offset)
-                logging.debug(f"    Formatted Times: Start='{start_formatted}', Stop='{stop_formatted}'")
+                start_formatted = format_xmltv_time(start_time); stop_formatted = format_xmltv_time(end_time) # Use final updated formatter
+                logging.debug(f"    Formatted Times: Start='{start_formatted}', Stop='{stop_formatted}'") # Check this output
                 if start_formatted and stop_formatted:
                     prog_el = ET.SubElement(tv_element, 'programme', attrib={'start': start_formatted,'stop': stop_formatted,'channel': channel_id})
                     ET.SubElement(prog_el, 'title', attrib={'lang': 'en'}).text = title

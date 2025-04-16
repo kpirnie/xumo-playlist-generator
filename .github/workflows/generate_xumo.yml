@@ -1,87 +1,126 @@
-      # - name: Checkout repository # Make sure you have this step BEFORE running the script
-      #   uses: actions/checkout@v4 # Or v3
+# This is the full path: .github/workflows/generate_xumo.yml
 
+name: Generate Xumo Playlist and EPG
+
+on:
+  workflow_dispatch: # Allows manual triggering from the Actions tab in GitHub
+  schedule:
+    # Runs around 4 AM UTC daily (adjust cron schedule as needed)
+    # See: https://crontab.guru/
+    - cron: '0 4 * * *'
+
+jobs:
+  generate: # Name of the job
+    runs-on: ubuntu-latest # Use the latest Ubuntu runner
+
+    steps:
+      # Step 1: Check out the repository code so the workflow can access your script
+      # THIS STEP IS REQUIRED AND NOW UNCOMMENTED
+      - name: Checkout repository
+        uses: actions/checkout@v4 # Using latest version
+
+      # Step 2: Set up Python environment
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10' # Or your desired version
+          python-version: '3.10' # Or your desired Python version
 
+      # Step 3: Install required Python dependencies
       - name: Install dependencies
-        run: pip install requests # Add other dependencies if needed
+        run: pip install requests # Add other dependencies here if your script needs them (e.g., pip install requests lxml)
 
+      # Step 4: Run the Python script to generate the files and add debugging
       - name: Run Xumo Scraper and Debug File Output
-        id: scraper # Give the step an id
+        id: scraper # Give the step an id to reference its outputs
         run: |
-          echo "--- Workspace contents BEFORE script ---"
-          pwd # Print current directory
-          ls -la # List all files in current directory
-          echo "--- 'playlists' dir contents BEFORE script ---"
-          ls -la playlists/ || echo "'playlists' directory does not exist yet."
+          echo "--- Current Directory ---"
+          pwd
 
-          # Run the python script
-          python your_script_name.py # <<< MAKE SURE THIS IS THE CORRECT FILENAME
+          echo "--- Workspace contents BEFORE script ---"
+          ls -la # List all files in current directory, including hidden
+
+          echo "--- 'playlists' dir contents BEFORE script ---"
+          ls -la playlists/ || echo "INFO: 'playlists' directory does not exist yet."
+
+          # --- IMPORTANT: REPLACE 'your_script_name.py' with the actual filename ---
+          echo "--- Running Python Script: your_script_name.py ---"
+          python your_script_name.py # <<< CHANGE THIS FILENAME
+
+          echo "--- Python Script Finished ---"
 
           echo "--- Workspace contents AFTER script ---"
-          pwd
           ls -la
+
           echo "--- 'playlists' dir contents AFTER script ---"
-          ls -la playlists/ || echo "'playlists' directory NOT FOUND after script run!"
+          ls -la playlists/ || echo "ERROR: 'playlists' directory NOT FOUND after script run!"
 
           echo "--- Checking file existence ---"
           if [ -f "playlists/xumo_playlist.m3u" ]; then
-            echo "playlists/xumo_playlist.m3u EXISTS."
-            # Set an output flag for the next step
+            echo "INFO: playlists/xumo_playlist.m3u EXISTS."
+            # Set an output flag indicating the main file was found
             echo "changes_found=true" >> $GITHUB_OUTPUT
           else
-            echo "playlists/xumo_playlist.m3u MISSING!"
+            echo "ERROR: playlists/xumo_playlist.m3u MISSING! Cannot commit."
             echo "changes_found=false" >> $GITHUB_OUTPUT
-            exit 0 # Exit gracefully if the main file is missing - no commit needed
-          fi
-          if [ -f "playlists/xumo_epg.xml.gz" ]; then
-            echo "playlists/xumo_epg.xml.gz EXISTS."
-          else
-            echo "playlists/xumo_epg.xml.gz MISSING!"
-            # If EPG is missing but playlist exists, maybe still commit? Adjust logic if needed.
+            exit 0 # Exit gracefully, no commit needed if primary file is missing
           fi
 
+          # Check secondary file (optional, doesn't affect commit step's run condition)
+          if [ -f "playlists/xumo_epg.xml.gz" ]; then
+            echo "INFO: playlists/xumo_epg.xml.gz EXISTS."
+          else
+            echo "WARNING: playlists/xumo_epg.xml.gz MISSING!"
+          fi
+
+      # Step 5: Commit and push the changes *only if* the scraper step found the playlist file
       - name: Commit and Push Changes
-        # Only run this step if the previous step found the playlist file
+        # Only run this step if the previous step's output 'changes_found' is 'true'
         if: steps.scraper.outputs.changes_found == 'true'
         run: |
+          # Configure Git
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
           echo "--- Running git status before add ---"
-          git status
+          git status --untracked-files=no # Show changes to tracked files
 
-          # Use git status to check for changes, more reliable than diff in some cases
-          # Check specifically for changes in the playlists directory
+          # Use git status to check for actual changes in the specific files
+          # Looks for files that are Modified (M) or Added (A) in the index/working tree
           if git status --porcelain playlists/xumo_playlist.m3u playlists/xumo_epg.xml.gz | grep -E '^[ AM]'; then
-             echo "Changes detected in Xumo files by git status, committing updates..."
+             echo "INFO: Changes detected in Xumo files by git status, committing updates..."
+
+             # Add *only* the specific files we expect to change
              git add playlists/xumo_playlist.m3u playlists/xumo_epg.xml.gz
 
              echo "--- Running git status after add ---"
              git status
 
-             git commit -m "Update Xumo M3U playlist and EPG ($(date +'%Y-%m-%d %H:%M:%S %Z')) [skip ci]" -a || echo "No changes to commit."
+             # Commit the changes. Adding a timestamp makes the message unique.
+             # Using '-a' might not be necessary if we explicitly added files.
+             # Adding '|| true' to prevent failure if commit finds nothing AFTER add (unlikely but safe)
+             git commit -m "Update Xumo M3U playlist and EPG ($(date +'%Y-%m-%d %H:%M:%S %Z')) [skip ci]" || echo "INFO: No changes to commit after 'git add'."
 
-             # Retry push logic (keep your existing retry logic)
+             # Retry push logic
+             echo "--- Attempting to push changes ---"
              n=0
              until [ $n -ge 5 ]
              do
-                git push && break
+                git push && break # Exit loop if push succeeds
                 n=$((n+1))
-                echo "Push failed. Retrying attempt $n/5..."
+                echo "WARNING: Push failed. Retrying attempt $n/5 in 15 seconds..."
                 sleep 15
              done
+
+             # Check if push failed after all retries
              if [ $n -ge 5 ]; then
                 echo "::error::Failed to push Xumo changes after multiple attempts."
-                exit 1 # Exit with error if push fails
+                exit 1 # Exit with error code
              fi
+             echo "--- Push successful ---"
           else
-             echo "No changes detected in Xumo files by git status."
+             echo "INFO: No changes detected in Xumo files by git status. Nothing to commit."
              exit 0 # Exit successfully, no commit needed
           fi
         env:
-          # Make sure you are passing the token if needed for pushing
+          # The GITHUB_TOKEN is automatically available to the runner for actions within the repo
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,87 @@
+      # - name: Checkout repository # Make sure you have this step BEFORE running the script
+      #   uses: actions/checkout@v4 # Or v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10' # Or your desired version
+
+      - name: Install dependencies
+        run: pip install requests # Add other dependencies if needed
+
+      - name: Run Xumo Scraper and Debug File Output
+        id: scraper # Give the step an id
+        run: |
+          echo "--- Workspace contents BEFORE script ---"
+          pwd # Print current directory
+          ls -la # List all files in current directory
+          echo "--- 'playlists' dir contents BEFORE script ---"
+          ls -la playlists/ || echo "'playlists' directory does not exist yet."
+
+          # Run the python script
+          python your_script_name.py # <<< MAKE SURE THIS IS THE CORRECT FILENAME
+
+          echo "--- Workspace contents AFTER script ---"
+          pwd
+          ls -la
+          echo "--- 'playlists' dir contents AFTER script ---"
+          ls -la playlists/ || echo "'playlists' directory NOT FOUND after script run!"
+
+          echo "--- Checking file existence ---"
+          if [ -f "playlists/xumo_playlist.m3u" ]; then
+            echo "playlists/xumo_playlist.m3u EXISTS."
+            # Set an output flag for the next step
+            echo "changes_found=true" >> $GITHUB_OUTPUT
+          else
+            echo "playlists/xumo_playlist.m3u MISSING!"
+            echo "changes_found=false" >> $GITHUB_OUTPUT
+            exit 0 # Exit gracefully if the main file is missing - no commit needed
+          fi
+          if [ -f "playlists/xumo_epg.xml.gz" ]; then
+            echo "playlists/xumo_epg.xml.gz EXISTS."
+          else
+            echo "playlists/xumo_epg.xml.gz MISSING!"
+            # If EPG is missing but playlist exists, maybe still commit? Adjust logic if needed.
+          fi
+
+      - name: Commit and Push Changes
+        # Only run this step if the previous step found the playlist file
+        if: steps.scraper.outputs.changes_found == 'true'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+          echo "--- Running git status before add ---"
+          git status
+
+          # Use git status to check for changes, more reliable than diff in some cases
+          # Check specifically for changes in the playlists directory
+          if git status --porcelain playlists/xumo_playlist.m3u playlists/xumo_epg.xml.gz | grep -E '^[ AM]'; then
+             echo "Changes detected in Xumo files by git status, committing updates..."
+             git add playlists/xumo_playlist.m3u playlists/xumo_epg.xml.gz
+
+             echo "--- Running git status after add ---"
+             git status
+
+             git commit -m "Update Xumo M3U playlist and EPG ($(date +'%Y-%m-%d %H:%M:%S %Z')) [skip ci]" -a || echo "No changes to commit."
+
+             # Retry push logic (keep your existing retry logic)
+             n=0
+             until [ $n -ge 5 ]
+             do
+                git push && break
+                n=$((n+1))
+                echo "Push failed. Retrying attempt $n/5..."
+                sleep 15
+             done
+             if [ $n -ge 5 ]; then
+                echo "::error::Failed to push Xumo changes after multiple attempts."
+                exit 1 # Exit with error if push fails
+             fi
+          else
+             echo "No changes detected in Xumo files by git status."
+             exit 0 # Exit successfully, no commit needed
+          fi
+        env:
+          # Make sure you are passing the token if needed for pushing
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

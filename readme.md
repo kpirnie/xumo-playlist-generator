@@ -8,8 +8,13 @@ The generated files are located in the `playlists/` directory.
 
 *   **Playlist URL:**
     `https://raw.githubusercontent.com/BuddyChewChew/xumo-playlist-generator/main/playlists/xumo_playlist.m3u`
+    
+    
     *(This URL already includes the correct EPG link via `url-tvg`)*
+
+    
 *   **EPG URL (usually not needed separately if player supports `url-tvg`):**
+*   
     `https://raw.githubusercontent.com/BuddyChewChew/xumo-playlist-generator/main/playlists/xumo_epg.xml.gz`
 
 Add the **Playlist URL** to your IPTV player (TiviMate, OTT Navigator, IPTV Smarters, etc.). The player should automatically fetch the EPG using the link embedded in the playlist.

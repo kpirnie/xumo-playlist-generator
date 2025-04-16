@@ -14,10 +14,9 @@ jobs:
     runs-on: ubuntu-latest # Use the latest Ubuntu runner
 
     steps:
-      # Step 1: Check out the repository code so the workflow can access your script
-      # THIS STEP IS REQUIRED AND NOW UNCOMMENTED
+      # Step 1: Check out the repository code
       - name: Checkout repository
-        uses: actions/checkout@v4 # Using latest version
+        uses: actions/checkout@v4
 
       # Step 2: Set up Python environment
       - name: Set up Python
@@ -27,24 +26,24 @@ jobs:
 
       # Step 3: Install required Python dependencies
       - name: Install dependencies
-        run: pip install requests # Add other dependencies here if your script needs them (e.g., pip install requests lxml)
+        run: pip install requests # Add other dependencies here if needed
 
       # Step 4: Run the Python script to generate the files and add debugging
       - name: Run Xumo Scraper and Debug File Output
-        id: scraper # Give the step an id to reference its outputs
+        id: scraper
         run: |
           echo "--- Current Directory ---"
           pwd
 
           echo "--- Workspace contents BEFORE script ---"
-          ls -la # List all files in current directory, including hidden
+          ls -la
 
           echo "--- 'playlists' dir contents BEFORE script ---"
           ls -la playlists/ || echo "INFO: 'playlists' directory does not exist yet."
 
           # --- IMPORTANT: REPLACE 'your_script_name.py' with the actual filename ---
-          echo "--- Running Python Script: your_script_name.py ---"
-          python generate_xumo.py # <<< CHANGE THIS FILENAME
+          echo "--- Running Python Script: generate_xumo.py ---" # Assuming this is your filename now
+          python generate_xumo.py # <<< CHANGE THIS FILENAME if it's different
 
           echo "--- Python Script Finished ---"
 
@@ -57,15 +56,13 @@ jobs:
           echo "--- Checking file existence ---"
           if [ -f "playlists/xumo_playlist.m3u" ]; then
             echo "INFO: playlists/xumo_playlist.m3u EXISTS."
-            # Set an output flag indicating the main file was found
             echo "changes_found=true" >> $GITHUB_OUTPUT
           else
             echo "ERROR: playlists/xumo_playlist.m3u MISSING! Cannot commit."
             echo "changes_found=false" >> $GITHUB_OUTPUT
-            exit 0 # Exit gracefully, no commit needed if primary file is missing
+            exit 0
           fi
 
-          # Check secondary file (optional, doesn't affect commit step's run condition)
           if [ -f "playlists/xumo_epg.xml.gz" ]; then
             echo "INFO: playlists/xumo_epg.xml.gz EXISTS."
           else
@@ -74,7 +71,6 @@ jobs:
 
       # Step 5: Commit and push the changes *only if* the scraper step found the playlist file
       - name: Commit and Push Changes
-        # Only run this step if the previous step's output 'changes_found' is 'true'
         if: steps.scraper.outputs.changes_found == 'true'
         run: |
           # Configure Git
@@ -82,45 +78,50 @@ jobs:
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
           echo "--- Running git status before add ---"
-          git status --untracked-files=no # Show changes to tracked files
+          git status --untracked-files=no
 
-          # Use git status to check for actual changes in the specific files
-          # Looks for files that are Modified (M) or Added (A) in the index/working tree
+          # Check if git *thinks* there are changes before forcing the add
+          # This is just for logging comparison
           if git status --porcelain playlists/xumo_playlist.m3u playlists/xumo_epg.xml.gz | grep -E '^[ AM]'; then
-             echo "INFO: Changes detected in Xumo files by git status, committing updates..."
+             echo "INFO: Git status detected changes before add."
+          else
+             echo "INFO: Git status detected NO changes before add. Forcing add to test .gitignore..."
+          fi
 
-             # Add *only* the specific files we expect to change
-             git add playlists/xumo_playlist.m3u playlists/xumo_epg.xml.gz
+          # --- MODIFICATION HERE: Use --force ---
+          echo "--- Attempting: git add --force playlists/... ---"
+          git add --force playlists/xumo_playlist.m3u playlists/xumo_epg.xml.gz
 
-             echo "--- Running git status after add ---"
-             git status
+          echo "--- Running git status after add --force ---"
+          git status
 
-             # Commit the changes. Adding a timestamp makes the message unique.
-             # Using '-a' might not be necessary if we explicitly added files.
-             # Adding '|| true' to prevent failure if commit finds nothing AFTER add (unlikely but safe)
-             git commit -m "Update Xumo M3U playlist and EPG ($(date +'%Y-%m-%d %H:%M:%S %Z')) [skip ci]" || echo "INFO: No changes to commit after 'git add'."
+          # Commit the changes. If 'git add --force' staged something, this should commit.
+          # If the content was truly identical, commit might still say nothing to commit.
+          echo "--- Attempting commit ---"
+          git commit -m "Update Xumo M3U playlist and EPG ($(date +'%Y-%m-%d %H:%M:%S %Z')) [skip ci]" || echo "INFO: No changes to commit (content likely identical or add failed)."
 
+          # Only try pushing if the commit command actually created a commit
+          # Check if HEAD changed compared to remote origin/main
+          if ! git diff --quiet HEAD origin/main -- playlists/; then
+             echo "--- Commit successful, attempting to push changes ---"
              # Retry push logic
-             echo "--- Attempting to push changes ---"
              n=0
              until [ $n -ge 5 ]
              do
-                git push && break # Exit loop if push succeeds
+                git push && break
                 n=$((n+1))
                 echo "WARNING: Push failed. Retrying attempt $n/5 in 15 seconds..."
                 sleep 15
              done
 
-             # Check if push failed after all retries
              if [ $n -ge 5 ]; then
                 echo "::error::Failed to push Xumo changes after multiple attempts."
-                exit 1 # Exit with error code
+                exit 1
              fi
              echo "--- Push successful ---"
           else
-             echo "INFO: No changes detected in Xumo files by git status. Nothing to commit."
-             exit 0 # Exit successfully, no commit needed
+              echo "INFO: No effective changes were committed (HEAD matches origin/main for playlists/). Nothing to push."
+              exit 0
           fi
         env:
-          # The GITHUB_TOKEN is automatically available to the runner for actions within the repo
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -53,7 +53,9 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - [
 
 # --- Helper Functions ---
 
+# <<< CORRECTED fetch_data function >>>
 def fetch_data(url, params=None, is_json=True, retries=2, delay=2, headers=WEB_HEADERS):
+    """Fetches data from a URL, handles JSON parsing and errors, includes retries."""
     logging.debug(f"URL: {url}, Params: {params}")
     logging.debug(f"Headers: {json.dumps(headers)}")
     for attempt in range(retries + 1):
@@ -63,26 +65,51 @@ def fetch_data(url, params=None, is_json=True, retries=2, delay=2, headers=WEB_H
             logging.debug(f"Response Status: {response.status_code}")
             if logging.getLogger().level == logging.DEBUG: logging.debug(f"Response Headers: {json.dumps(dict(response.headers))}")
             response.raise_for_status()
+
             if is_json:
-                if not response.content: logging.warning(f"Empty response content received from {url}"); return None
-                try: return response.json()
-                except json.JSONDecodeError as e_final: logging.error(f"Error decoding JSON. Content: {response.text[:500]}... - {e_final}"); if logging.getLogger().level == logging.DEBUG: logging.debug(f"Full Text:\n{response.text}"); return None
+                if not response.content:
+                    logging.warning(f"Empty response content received from {url}")
+                    return None
+                try:
+                    # Attempt to parse JSON only once
+                    parsed_json = response.json()
+                    return parsed_json
+                except json.JSONDecodeError as e_final:
+                    # --- CORRECTED BLOCK ---
+                    logging.error(f"Error decoding JSON. Content: {response.text[:500]}... - {e_final}")
+                    if logging.getLogger().level == logging.DEBUG:
+                        logging.debug(f"Full Text:\n{response.text}")
+                    return None
+                    # --- END OF CORRECTION ---
             else:
-                 try: decoded_text = response.content.decode('utf-8', errors='ignore'); if logging.getLogger().level == logging.DEBUG: logging.debug(f"Raw Text Response:\n{decoded_text[:1500]}..."); return decoded_text
-                 except Exception as decode_ex: logging.error(f"Error decoding text response: {decode_ex}"); return None
+                 try:
+                     decoded_text = response.content.decode('utf-8', errors='ignore')
+                     if logging.getLogger().level == logging.DEBUG: logging.debug(f"Raw Text Response:\n{decoded_text[:1500]}...")
+                     return decoded_text
+                 except Exception as decode_ex:
+                     logging.error(f"Error decoding text response: {decode_ex}")
+                     return None
+
         except requests.exceptions.HTTPError as e:
             logging.warning(f"Attempt {attempt+1}/{retries+1} HTTP Error: {e}")
             if response is not None: logging.warning(f"Error Response Content: {response.text[:500]}...")
-            if attempt < retries and response is not None and response.status_code not in [401, 403, 404, 429]: time.sleep(delay * (attempt + 1))
-            elif attempt == retries: logging.error(f"Final attempt failed with HTTP Error: {e}"); return None
-            else: break
+            if attempt < retries and response is not None and response.status_code not in [401, 403, 404, 429]:
+                time.sleep(delay * (attempt + 1))
+            elif attempt == retries:
+                logging.error(f"Final attempt failed with HTTP Error: {e}")
+                return None
+            else: # Non-retriable HTTP error or final attempt failed
+                break
         except requests.exceptions.RequestException as e:
             logging.warning(f"Attempt {attempt+1}/{retries+1} Network Error: {e}")
-            if attempt < retries: time.sleep(delay * (attempt + 1))
-            elif attempt == retries: logging.error(f"Final attempt failed with Network Error: {e}"); return None
+            if attempt < retries:
+                time.sleep(delay * (attempt + 1))
+            elif attempt == retries:
+                logging.error(f"Final attempt failed with Network Error: {e}")
+                return None
     return None
+# <<< END OF CORRECTED fetch_data function >>>
 
-# <<< UPDATED TIME PARSING FUNCTION >>>
 def parse_iso_datetime(iso_time_str):
     """Parses ISO 8601 string, handling 'Z', milliseconds, and '+HHMM' timezone format."""
     if not iso_time_str:
@@ -97,35 +124,26 @@ def parse_iso_datetime(iso_time_str):
 
         # 2. Handle potential milliseconds by simple truncation
         if '.' in iso_time_str:
-            # Find offset first to preserve it after truncation
             offset_str = ""
             plus_index = iso_time_str.rfind('+')
             minus_index = iso_time_str.rfind('-')
-            # Determine the actual offset index (must be after the 'T')
             t_index = iso_time_str.find('T')
             offset_index = -1
             if plus_index > t_index: offset_index = plus_index
-            if minus_index > t_index: offset_index = max(offset_index, minus_index) # Takes the later one if both exist
-
+            if minus_index > t_index: offset_index = max(offset_index, minus_index)
             if offset_index != -1:
-                 offset_str = iso_time_str[offset_index:] # Grab the offset part
-                 iso_time_str = iso_time_str[:offset_index] # Keep time before offset
-
-            # Now truncate milliseconds from the main part
+                 offset_str = iso_time_str[offset_index:]
+                 iso_time_str = iso_time_str[:offset_index]
             iso_time_str = iso_time_str.split('.', 1)[0]
-            # Reattach the offset
             iso_time_str += offset_str
 
         # 3. Fix timezone format (+HHMM -> +HH:MM)
-        # Check if last 5 chars match the pattern: +/- followed by 4 digits
         if len(iso_time_str) >= 5 and iso_time_str[-5] in ['+', '-'] and iso_time_str[-4:].isdigit():
-             # Add colon only if it's missing
              if ':' not in iso_time_str[-5:]:
                  iso_time_str = iso_time_str[:-2] + ':' + iso_time_str[-2:]
                  logging.debug(f"Inserted colon in timezone offset: {iso_time_str}")
 
         # 4. Add default UTC offset if none exists after all processing
-        # Check for offset signs *after* the date part (index 10)
         if '+' not in iso_time_str[10:] and '-' not in iso_time_str[10:]:
              logging.debug(f"Adding default +00:00 offset to '{iso_time_str}'")
              iso_time_str += "+00:00"
@@ -145,9 +163,7 @@ def format_xmltv_time(dt_obj):
         return ""
     if not dt_obj.tzinfo: dt_obj = dt_obj.replace(tzinfo=timezone.utc)
     else: dt_obj = dt_obj.astimezone(timezone.utc) # Ensure UTC for consistent +0000 offset
-    # Format as YYYYMMDDHHMMSS +HHMM (no colon in offset)
     return dt_obj.strftime('%Y%m%d%H%M%S %z').replace(':', '')
-# <<< END OF TIME FUNCTIONS >>>
 
 
 def ensure_output_dir():
@@ -156,12 +172,32 @@ def ensure_output_dir():
         try: os.makedirs(OUTPUT_DIR)
         except OSError as e: logging.error(f"Failed to create directory {OUTPUT_DIR}: {e}"); raise
 
+# --- XMLTV DOCTYPE Addition Option ---
+# Decide whether to add DOCTYPE. Start without it unless confirmed necessary.
+ADD_XMLTV_DOCTYPE = False # Set to True to add <!DOCTYPE...>
+
 def save_gzipped_xml(tree, filepath):
+    """Saves the ElementTree XML to a gzipped file, optionally adding DOCTYPE."""
     try:
-        xml_string = ET.tostring(tree.getroot(), encoding='UTF-8', xml_declaration=True)
-        with gzip.open(filepath, 'wb') as f: f.write(xml_string)
+        if ADD_XMLTV_DOCTYPE:
+            xml_partial_string = ET.tostring(tree.getroot(), encoding='unicode', method='xml')
+            xml_full_string = f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE tv SYSTEM "xmltv.dtd">
+{xml_partial_string}'''
+            xml_bytes = xml_full_string.encode('utf-8')
+            logging.debug("Adding DOCTYPE to XML output.")
+        else:
+            # Default behavior: Use standard ET tostring with declaration
+            xml_bytes = ET.tostring(tree.getroot(), encoding='UTF-8', xml_declaration=True)
+            logging.debug("Saving XML without DOCTYPE.")
+
+        with gzip.open(filepath, 'wb') as f:
+            f.write(xml_bytes)
         logging.info(f"Gzipped EPG XML file saved: {filepath}")
-    except Exception as e: logging.error(f"Error writing gzipped EPG file {filepath}: {e}")
+
+    except Exception as e:
+        logging.error(f"Error writing gzipped EPG file {filepath}: {e}")
+
 
 def save_m3u(content, filepath):
     try:
@@ -188,97 +224,53 @@ def process_stream_uri(uri):
     except Exception as e: logging.error(f"Error processing stream URI '{uri[:50]}...': {e}"); return None
 
 
-# --- Core Logic Functions (get_channels..., fetch_streams..., fetch_epg...) ---
-# These functions remain unchanged from the previous full script version
-# ... (get_channels_via_proxy_list, get_live_channels_list_android_tv, fetch_stream_urls_via_asset_lookup, fetch_epg_data functions are identical to the previous version) ...
+# --- Core Logic Functions ---
 
 def get_channels_via_proxy_list():
-    """Attempts to fetch channel list via the Valencia proxy LIST endpoint (10006)."""
     logging.info(f"Attempting Valencia Proxy List: {PROXY_CHANNEL_LIST_URL}")
     data = fetch_data(PROXY_CHANNEL_LIST_URL, is_json=True, retries=1, headers=WEB_HEADERS)
-
-    if not data or not isinstance(data, dict):
-        logging.warning(f"Failed to fetch valid dictionary data from Valencia proxy list endpoint.")
-        return None
-
-    processed_channels = []
-    channel_items = []
-
+    if not data or not isinstance(data, dict): logging.warning(f"Failed to fetch valid dictionary data from Valencia proxy list endpoint."); return None
+    processed_channels = []; channel_items = []
     if 'channel' in data and isinstance(data['channel'], dict) and 'item' in data['channel'] and isinstance(data['channel']['item'], list):
-        channel_items = data['channel']['item']
-        logging.debug("Found channel list under data['channel']['item']")
+        channel_items = data['channel']['item']; logging.debug("Found channel list under data['channel']['item']")
     elif 'items' in data and isinstance(data['items'], list):
-        channel_items = data['items']
-        logging.debug("Found channel list under data['items']")
-    else:
-        logging.error(f"Could not find channel list in Valencia proxy list response. Top-level keys: {list(data.keys())}")
-        return None
-
+        channel_items = data['items']; logging.debug("Found channel list under data['items']")
+    else: logging.error(f"Could not find channel list in Valencia proxy list response. Top-level keys: {list(data.keys())}"); return None
     logging.info(f"Found {len(channel_items)} potential channel items in Valencia list response.")
-    if not channel_items:
-        logging.warning("Valencia list response contained an empty channel list.")
-        return None
-
+    if not channel_items: logging.warning("Valencia list response contained an empty channel list."); return None
     for item in channel_items:
-        if not isinstance(item, dict):
-            logging.warning(f"Skipping non-dictionary item in channel list: {item}")
-            continue
+        if not isinstance(item, dict): logging.warning(f"Skipping non-dictionary item in channel list: {item}"); continue
         try:
-            channel_id = item.get('guid', {}).get('value') or item.get('id')
-            title = item.get('title') or item.get('name')
-            number_str = item.get('number')
-            callsign = item.get('callsign', '')
-            logo_url = item.get('images', {}).get('logo') or item.get('logo')
-
-            genre_list = item.get('genre')
-            genre = 'General'
-            if isinstance(genre_list, list) and len(genre_list) > 0 and isinstance(genre_list[0], dict):
-                 genre = genre_list[0].get('value', 'General')
+            channel_id = item.get('guid', {}).get('value') or item.get('id'); title = item.get('title') or item.get('name')
+            number_str = item.get('number'); callsign = item.get('callsign', ''); logo_url = item.get('images', {}).get('logo') or item.get('logo')
+            genre_list = item.get('genre'); genre = 'General'
+            if isinstance(genre_list, list) and len(genre_list) > 0 and isinstance(genre_list[0], dict): genre = genre_list[0].get('value', 'General')
             elif isinstance(genre_list, str): genre = genre_list
-
-            raw_stream_uri = None
-            stream_info = item.get('stream') or item.get('streams') or item.get('playback') or item.get('providers')
-
-            if isinstance(stream_info, dict):
-                 raw_stream_uri = stream_info.get('hls') or stream_info.get('m3u8') or stream_info.get('live') or stream_info.get('url') or stream_info.get('uri')
+            raw_stream_uri = None; stream_info = item.get('stream') or item.get('streams') or item.get('playback') or item.get('providers')
+            if isinstance(stream_info, dict): raw_stream_uri = stream_info.get('hls') or stream_info.get('m3u8') or stream_info.get('live') or stream_info.get('url') or stream_info.get('uri')
             elif isinstance(stream_info, list) and len(stream_info) > 0:
                  for provider in stream_info:
                      if isinstance(provider, dict) and 'sources' in provider and isinstance(provider['sources'], list):
                          for source in provider['sources']:
-                             if isinstance(source, dict) and source.get('uri') and (source.get('type') == 'application/x-mpegURL' or source.get('uri','').endswith('.m3u8')):
-                                 raw_stream_uri = source['uri']
-                                 break
+                             if isinstance(source, dict) and source.get('uri') and (source.get('type') == 'application/x-mpegURL' or source.get('uri','').endswith('.m3u8')): raw_stream_uri = source['uri']; break
                          if raw_stream_uri: break
-
-            properties = item.get('properties', {})
-            is_live = properties.get('is_live') == "true"
-            is_drm = callsign.endswith("-DRM") or callsign.endswith("DRM-CMS")
-
+            properties = item.get('properties', {}); is_live = properties.get('is_live') == "true"; is_drm = callsign.endswith("-DRM") or callsign.endswith("DRM-CMS")
             if is_drm: logging.debug(f"Skipping potential DRM channel: {channel_id} ({title})"); continue
             if not is_live: logging.debug(f"Skipping non-live channel: {channel_id} ({title})"); continue
             if not channel_id or not title: logging.warning(f"Skipping item due to missing ID or title: {item}"); continue
-
-            channel_id_str = str(channel_id)
-
-            final_logo_url = None
+            channel_id_str = str(channel_id); final_logo_url = None
             if logo_url:
                  if logo_url.startswith('//'): final_logo_url = 'https:' + logo_url
                  elif logo_url.startswith('/'): final_logo_url = 'https://image.xumo.com' + logo_url
                  else: final_logo_url = logo_url
             else: final_logo_url = XUMO_LOGO_URL_TEMPLATE.replace("{channel_id}", channel_id_str)
-
             processed_stream_url = None
             if raw_stream_uri:
                 processed_stream_url = process_stream_uri(raw_stream_uri)
                 if not processed_stream_url: logging.warning(f"Found raw stream URI for '{title}' ({channel_id_str}) but failed to process it: {raw_stream_uri[:100]}...")
             else: logging.debug(f"No direct stream URI found for channel '{title}' ({channel_id_str}) in Valencia list item.")
-
-            processed_channels.append({
-                'id': channel_id_str, 'name': title, 'number': str(number_str) if number_str else None,
-                'callsign': callsign, 'logo': final_logo_url, 'group': genre, 'stream_url': processed_stream_url,
-            })
+            processed_channels.append({ 'id': channel_id_str, 'name': title, 'number': str(number_str) if number_str else None, 'callsign': callsign, 'logo': final_logo_url, 'group': genre, 'stream_url': processed_stream_url, })
         except Exception as e: logging.warning(f"Error processing Valencia list item {item.get('id', 'N/A')}: {e}", exc_info=True)
-
     if not processed_channels: logging.warning("Valencia list endpoint returned data, but no channels could be successfully processed."); return None
     logging.info(f"Successfully processed {len(processed_channels)} channels from Valencia list endpoint.")
     return processed_channels
@@ -290,20 +282,14 @@ def get_live_channels_list_android_tv():
     live_channels = []
     for item in data['channel'].get('item', []):
         try:
-            channel_id = item.get('guid', {}).get('value')
-            title = item.get('title')
-            callsign = item.get('callsign', '')
-            properties = item.get('properties', {})
-            is_live = properties.get('is_live') == "true"
-            number_str = item.get('number')
-            genre_list = item.get('genre')
-            genre = 'General'
+            channel_id = item.get('guid', {}).get('value'); title = item.get('title'); callsign = item.get('callsign', '')
+            properties = item.get('properties', {}); is_live = properties.get('is_live') == "true"; number_str = item.get('number')
+            genre_list = item.get('genre'); genre = 'General'
             if isinstance(genre_list, list) and len(genre_list) > 0 and isinstance(genre_list[0], dict): genre = genre_list[0].get('value', 'General')
             if callsign.endswith("-DRM") or callsign.endswith("DRM-CMS"): logging.debug(f"Skipping DRM channel: {channel_id} ({title})"); continue
             if not is_live: logging.debug(f"Skipping non-live channel: {channel_id} ({title})"); continue
             if channel_id and title:
-                channel_id_str = str(channel_id)
-                logo_url = XUMO_LOGO_URL_TEMPLATE.replace("{channel_id}", channel_id_str)
+                channel_id_str = str(channel_id); logo_url = XUMO_LOGO_URL_TEMPLATE.replace("{channel_id}", channel_id_str)
                 live_channels.append({ 'id': channel_id_str, 'name': title, 'number': number_str, 'callsign': callsign, 'logo': logo_url, 'group': genre, 'stream_url': None })
             else: logging.warning(f"Skipping Android channel item due to missing ID or title: {item}")
         except Exception as e: logging.warning(f"Error processing Android channel item {item}: {e}", exc_info=True)
@@ -312,23 +298,18 @@ def get_live_channels_list_android_tv():
 
 def fetch_stream_urls_via_asset_lookup(channels_list):
     logging.info(f"Attempting Android TV asset lookup for {len(channels_list)} channels...")
-    processed_count = 0
-    channels_with_streams = []
+    processed_count = 0; channels_with_streams = []
     for i, channel_info in enumerate(channels_list):
         channel_id = channel_info['id']
         if channel_info.get('stream_url'): logging.debug(f"Stream URL already present for {channel_id}, skipping asset lookup."); channels_with_streams.append(channel_info); continue
         logging.debug(f"Asset Lookup: Processing {channel_id} ({channel_info['name']}) ({i+1}/{len(channels_list)})")
-        current_hour = datetime.now(timezone.utc).hour
-        broadcast_url = BROADCAST_NOW_URL_TEMPLATE.format(channel_id=channel_id, hour_num=current_hour)
-        logging.debug(f"Fetching broadcast info: {broadcast_url}")
-        broadcast_data = fetch_data(broadcast_url, is_json=True, retries=1, headers=ANDROID_TV_HEADERS)
+        current_hour = datetime.now(timezone.utc).hour; broadcast_url = BROADCAST_NOW_URL_TEMPLATE.format(channel_id=channel_id, hour_num=current_hour)
+        logging.debug(f"Fetching broadcast info: {broadcast_url}"); broadcast_data = fetch_data(broadcast_url, is_json=True, retries=1, headers=ANDROID_TV_HEADERS)
         asset_id = None
         if broadcast_data and 'assets' in broadcast_data and isinstance(broadcast_data['assets'], list) and len(broadcast_data['assets']) > 0:
-            now_utc = datetime.now(timezone.utc)
-            current_asset = None
+            now_utc = datetime.now(timezone.utc); current_asset = None
             for asset in broadcast_data['assets']:
-                start_time = parse_iso_datetime(asset.get('start'))
-                end_time = parse_iso_datetime(asset.get('end'))
+                start_time = parse_iso_datetime(asset.get('start')); end_time = parse_iso_datetime(asset.get('end'))
                 if start_time and end_time and start_time <= now_utc < end_time: current_asset = asset; break
             if not current_asset and broadcast_data['assets']: current_asset = broadcast_data['assets'][0]
             if current_asset: asset_id = current_asset.get('id')
@@ -336,10 +317,8 @@ def fetch_stream_urls_via_asset_lookup(channels_list):
             else: logging.warning(f"Relevant asset in broadcast data for channel {channel_id} has no ID.")
         else: logging.warning(f"Could not get valid broadcast data or assets for channel {channel_id} (Hour: {current_hour})"); time.sleep(API_DELAY_SECONDS); continue
         if not asset_id: logging.warning(f"No asset ID found for channel {channel_id}, cannot get stream URL."); time.sleep(API_DELAY_SECONDS); continue
-        asset_details_url = ASSET_DETAILS_URL_TEMPLATE.format(asset_id=asset_id)
-        logging.debug(f"Fetching asset details: {asset_details_url}")
-        asset_data = fetch_data(asset_details_url, is_json=True, headers=ANDROID_TV_HEADERS)
-        raw_stream_uri = None
+        asset_details_url = ASSET_DETAILS_URL_TEMPLATE.format(asset_id=asset_id); logging.debug(f"Fetching asset details: {asset_details_url}")
+        asset_data = fetch_data(asset_details_url, is_json=True, headers=ANDROID_TV_HEADERS); raw_stream_uri = None
         if asset_data and 'providers' in asset_data and isinstance(asset_data['providers'], list):
             for provider in asset_data['providers']:
                  if ('sources' in provider and isinstance(provider['sources'], list)):
@@ -351,8 +330,7 @@ def fetch_stream_urls_via_asset_lookup(channels_list):
         if not raw_stream_uri: logging.warning(f"No stream URI found in sources for asset {asset_id} (Channel {channel_id})"); time.sleep(API_DELAY_SECONDS); continue
         processed_stream_url = process_stream_uri(raw_stream_uri)
         if processed_stream_url:
-            channel_info['stream_url'] = processed_stream_url
-            logging.debug(f"Successfully processed stream URL for channel {channel_id} via asset lookup")
+            channel_info['stream_url'] = processed_stream_url; logging.debug(f"Successfully processed stream URL for channel {channel_id} via asset lookup")
             channels_with_streams.append(channel_info); processed_count += 1
         else: logging.warning(f"Failed to process stream URI for asset {asset_id} (Channel {channel_id})")
         time.sleep(API_DELAY_SECONDS)
@@ -362,8 +340,7 @@ def fetch_stream_urls_via_asset_lookup(channels_list):
 def fetch_epg_data(channel_list):
     if not channel_list: return {}
     logging.info(f"Fetching EPG data for {len(channel_list)} channels (using Android TV EPG endpoint)...")
-    consolidated_epg = {channel['id']: [] for channel in channel_list}
-    assets_cache = {}; channel_ids_in_list = {ch['id'] for ch in channel_list}
+    consolidated_epg = {channel['id']: [] for channel in channel_list}; assets_cache = {}; channel_ids_in_list = {ch['id'] for ch in channel_list}
     today = datetime.now(timezone.utc); dates_to_fetch = [today + timedelta(days=d) for d in range(EPG_FETCH_DAYS)]
     total_requests = 0; total_programs_fetched = 0
     for date_obj in dates_to_fetch:
@@ -501,7 +478,7 @@ if __name__ == "__main__":
          logging.warning("No channels with stream URLs found after trying all methods. Generating empty files.")
          save_m3u(f'#EXTM3U url-tvg="{EPG_RAW_URL}"\n', os.path.join(OUTPUT_DIR, PLAYLIST_FILENAME))
          empty_root = ET.Element('tv'); empty_tree = ET.ElementTree(empty_root)
-         save_gzipped_xml(empty_tree, os.path.join(OUTPUT_DIR, EPG_FILENAME))
+         save_gzipped_xml(empty_tree, os.path.join(OUTPUT_DIR, EPG_FILENAME)) # Use corrected save function
          logging.info("Generated empty playlist and EPG files."); sys.exit(0)
 
     final_channel_list_with_streams = [ch for ch in final_channel_list_with_streams if ch.get('stream_url')]
@@ -510,12 +487,12 @@ if __name__ == "__main__":
         logging.warning("Filtering removed all channels (no streams found). Generating empty files.")
         save_m3u(f'#EXTM3U url-tvg="{EPG_RAW_URL}"\n', os.path.join(OUTPUT_DIR, PLAYLIST_FILENAME))
         empty_root = ET.Element('tv'); empty_tree = ET.ElementTree(empty_root)
-        save_gzipped_xml(empty_tree, os.path.join(OUTPUT_DIR, EPG_FILENAME))
+        save_gzipped_xml(empty_tree, os.path.join(OUTPUT_DIR, EPG_FILENAME)) # Use corrected save function
         logging.info("Generated empty playlist and EPG files."); sys.exit(0)
 
     epg_data = fetch_epg_data(final_channel_list_with_streams)
     epg_tree = generate_epg_xml(final_channel_list_with_streams, epg_data)
     m3u_content = generate_m3u_playlist(final_channel_list_with_streams)
     save_m3u(m3u_content, os.path.join(OUTPUT_DIR, PLAYLIST_FILENAME))
-    save_gzipped_xml(epg_tree, os.path.join(OUTPUT_DIR, EPG_FILENAME))
+    save_gzipped_xml(epg_tree, os.path.join(OUTPUT_DIR, EPG_FILENAME)) # Use corrected save function
     logging.info("--- Xumo Scraper Finished Successfully ---")

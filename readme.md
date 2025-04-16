@@ -14,7 +14,8 @@ The generated files are located in the `playlists/` directory.
 
     
 *   **EPG URL:**
-*   `https://raw.githubusercontent.com/BuddyChewChew/xumo-playlist-generator/main/playlists/xumo_epg.xml.gz`
+    `https://raw.githubusercontent.com/BuddyChewChew/xumo-playlist-generator/main/playlists/xumo_epg.xml.gz`
+    
 
      (usually not needed separately if player supports `url-tvg`)
 

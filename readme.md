@@ -9,7 +9,7 @@ This repository automatically generates an M3U playlist and XMLTV EPG file for X
 
 - M3U: https://raw.githubusercontent.com/BuddyChewChew/xumo-playlist-generator/refs/heads/main/playlists/xumo_playlist.m3u
 
-![Screenshot](https://github.com/BuddyChewChew/tubi-scraper/blob/main/Screenshot%202025-03-01%20010530.jpeg)
+![Screenshot](https://github.com/BuddyChewChew/xumo-playlist-generator/blob/main/Screenshot%202025-04-16%20202330.jpg?raw=true)
 
 
 

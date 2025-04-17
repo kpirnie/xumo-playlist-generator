@@ -23,7 +23,7 @@ Add the **Playlist URL** to your IPTV player (TiviMate, OTT Navigator, IPTV Smar
 
 ## Disclaimer
 
-*   Uses official Xumo APIs identified through community efforts. API endpoints or data structures may change without notice, breaking the script.
+*   Data structures may change without notice, breaking the script.
 *   Stream availability depends on Xumo. Placeholder replacement logic for stream URLs might need adjustments if Xumo changes requirements.
 *   EPG data accuracy depends on the data returned by Xumo's EPG endpoint.
 *   Use responsibly and according to Xumo's terms of service.

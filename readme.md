@@ -18,3 +18,28 @@ This repository automatically generates an M3U playlist and XMLTV EPG file for X
 *   Stream availability depends on Xumo. Placeholder replacement logic for stream URLs might need adjustments if Xumo changes requirements.
 *   EPG data accuracy depends on the data returned by Xumo's EPG endpoint.
 *   Use responsibly and according to Xumo's terms of service.
+
+
+## 💲 Donate Crypto: buddychewchewun.cbd.id
+
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="https://github.com/BuddyChewChew/My-Streams/blob/main/QR/BITCOIN.png" width="200"><br>
+      <strong>Bitcoin</strong><br>
+      <code>3ENVoL2W1jkDDpxAP2V6jodRwSmWH3vnXA</code>
+    </td>
+    <td align="center">
+      <img src="https://github.com/BuddyChewChew/My-Streams/blob/main/QR/ETHEREUM.png" width="200"><br>
+      <strong>Ethereum</strong><br>
+      <code>0x55498E15C4BBC398e8D06cCA3bF23D1127AdA85d</code>
+    </td>
+    <td align="center">
+      <img src="https://github.com/BuddyChewChew/My-Streams/blob/main/QR/DOGECOIN.png" width="200"><br>
+      <strong>Dogecoin</strong><br>
+      <code>D6UcqWSB2Bnh92UqLUmDwkGVasFdPveXBy</code>
+    </td>
+  </tr>
+</table>
+
+SCROLL ➡️

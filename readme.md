@@ -8,7 +8,7 @@ All streams are from a FREE publicly available source no DRM content. No login r
 This repository automatically generates an M3U playlist and XMLTV EPG file for Xumo TV channels available in the US.
 
 - M3U: https://raw.githubusercontent.com/BuddyChewChew/xumo-playlist-generator/refs/heads/main/playlists/xumo_playlist.m3u
-- TIVIMATE USERS: USE `IPTV smarters` as your user agent for the playlist. If channels freeze going in and out of commercials. 
+- TIVIMATE USERS: Use `IPTV smarters` as your user agent for the playlist. If channels freeze going in and out of commercials. 
 
 ![Screenshot](https://github.com/BuddyChewChew/xumo-playlist-generator/blob/main/Screenshot%202025-04-16%20202330.jpg?raw=true)
 

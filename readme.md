@@ -3,7 +3,7 @@
 
 All streams are from a FREE publicly available source no DRM content. No login required and no commercials cut from streams. I would suggest visit [Xumo](https://play.xumo.com/live-guide/alien-nation-by-dust) or download the app for more content like (Movies Ondemand).
 
-# Xumo M3U Playlist and EPG Generator
+# ⭐ Xumo M3U Playlist and EPG Generator
 
 This repository automatically generates an M3U playlist and XMLTV EPG file for Xumo TV channels available in the US.
 

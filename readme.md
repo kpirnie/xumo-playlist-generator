@@ -12,27 +12,6 @@ This repository automatically generates an M3U playlist and XMLTV EPG file for X
 ![Screenshot](https://github.com/BuddyChewChew/xumo-playlist-generator/blob/main/Screenshot%202025-04-16%20202330.jpg?raw=true)
 
 
-
-
-## How to Use
-
-The generated files are located in the `playlists/` directory.
-
-*   **Playlist URL:**
-    `https://raw.githubusercontent.com/BuddyChewChew/xumo-playlist-generator/main/playlists/xumo_playlist.m3u`
-    
-    
-    *(This URL already includes the correct EPG link via `url-tvg`)*
-
-    
-*   **EPG URL:**
-    `https://raw.githubusercontent.com/BuddyChewChew/xumo-playlist-generator/main/playlists/xumo_epg.xml.gz`
-    
-
-     (usually not needed separately if player supports `url-tvg`)
-
-Add the **Playlist URL** to your IPTV player (TiviMate, OTT Navigator, IPTV Smarters, etc.). The player should automatically fetch the EPG using the link embedded in the playlist.
-
 ## Disclaimer
 
 *   Data structures may change without notice, breaking the script.

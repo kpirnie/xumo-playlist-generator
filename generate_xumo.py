@@ -41,7 +41,7 @@ HOURS_TO_FETCH = 24
 API_DELAY_SECONDS = 0.10
 OUTPUT_DIR = "playlists"
 PLAYLIST_FILENAME = "xumo_playlist.m3u"
-EPG_FILENAME = "xumo_epg.xml.gz"
+EPG_FILENAME = "xumo_epg.xml"
 REQUEST_TIMEOUT = 45
 
 # !!! GitHub Repo Info !!!
@@ -147,7 +147,7 @@ def save_gzipped_xml(tree, filepath):
             xml_bytes = xml_full_string.encode('utf-8'); logging.debug("Adding DOCTYPE to XML output.")
         else:
             xml_bytes = ET.tostring(tree.getroot(), encoding='UTF-8', xml_declaration=True); logging.debug("Saving XML without DOCTYPE.")
-        with gzip.open(filepath, 'wb') as f: f.write(xml_bytes)
+        open(filepath, 'wb').write(xml_bytes)
         logging.info(f"Gzipped EPG XML file saved: {filepath}")
     except Exception as e: logging.error(f"Error writing gzipped EPG file {filepath}: {e}")
 
